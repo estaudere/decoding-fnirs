@@ -1,4 +1,4 @@
-"""Implementation of fNIRSNet model, from https://github.com/wzhlearning/fNIRSNet?tab=readme-ov-file"""
+"""CNN model for fNIRS data classification."""
 
 import torch
 import torch.nn as nn

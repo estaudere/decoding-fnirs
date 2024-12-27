@@ -17,7 +17,7 @@ from tqdm import tqdm
 # train each model on the train split
 # evaluate with full model pipeline on the test split, to collect the results
 
-SUBJECT_NAME = 'data/New10Subject1'
+SUBJECT_NAME = 'data/New10Subject2'
 DEVICE = torch.device('mps' if torch.mps.is_available() else 'cpu')
 non_rest_dataset_params = {
     'sliding_windows': True,
@@ -65,10 +65,14 @@ def load_datasets(subject_name, split=0.8):
         # non-rest data
         exp_labels = exp_labels[:len(exp_data)]
         exp_labels = exp_labels[:, 2].astype('float').astype('int')
+        
+        if 'Subject2' in SUBJECT_NAME and exp_data.shape[2] == 93:
+            logger.warning(f"Experiment {experiment} has 93 timepoints, dropping")
+            continue
 
         data.append(exp_data)
         labels.append(exp_labels)
-    
+
     data = np.concatenate(data, axis=0)
     labels = np.concatenate(labels, axis=0)
     data = torch.tensor(data, dtype=torch.float32)
@@ -126,8 +130,8 @@ def train_non_rest_model(dataset):
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
         
-        progress.set_description(f"training non-rest model, loss = {running_loss / len(dataloader):.4f}")
-        loss_per_epoch.append(running_loss / len(dataloader))
+        progress.set_description(f"training non-rest model, loss = {running_loss / len(dataset):.4f}")
+        loss_per_epoch.append(running_loss / len(dataset))
         training_accuracy_per_epoch.append(100 * correct / total)
         lrStep.step()
         
