@@ -1,0 +1,32 @@
+- fNIRS is a neural imaging technique using light (typically from LEDs pressed to the scalp) to measure reflectance of brain matter. It has been demonstrated that based on factors such as blood floor, chromophores, and other particles within brain matter, the light reflected changes. This is measured by receptors located on another, typically adjacent area of the head (with a near and a far receptor?), and can be outlined by equations derived from the [modified Beer-Lambert law](((67635a53-0cba-4c57-a97d-aa6cc0e44876))). The equations take into account factors such as anisotropy and reflectance that are affected by changes in the physiognomy of the brain.
+- fNIRS is a far cheaper solution than fMRI, and allows for far greater temporal granularity (around 25 frames per second vs. 1 frame per second), just a little lower than EEGs. However, fNIRS operates at a lower spatial granularity as compared to fMRI, and can be quite noisy. It is very similar to a pulse oximeter, but it is all over the head.
+- A channel is the data recorded between one source and one detector pair (so it is recording the data between those two optodes).
+- The BOLD response is the blood-oxygen-dependent signal; as neurons fire, they consume metabolic resources ($O_2$) which need replenishing, which reaches the activation site on the protein hemoglobin (called neurovascular coupling).
+	- Because of various processes, the flow of oxygen drips a bit initially, then surges, then tapers off. fMRIs and fNIRS can both pick up on these oxygen patterns
+	- MR signal is the relationship between oxygenated and de-oxygenated hemoglobin
+	- The mechanism between NIRS tries to estimate these values because infrared light transmits well through skin and bone, but differentially through HbO and Hb; so, we can detect with HbO is changing
+	- Absorption coefficient is the absorbance of light passing through 1cm of media at a concentration of 1mol/dm^3
+- Beer-Lambert Law is $\log_{10} ({I_{inc} \over I_{det}}) = \epsilon \cdot C \cdot L$, where $I_{inc}$ is incident light intensity, $I_{det}$ is detected light intensity, $\epsilon$ is the molar absorption coefficient (from spectra graph), $C$ is the concentration of substance in media, and $L$ is the path length
+	- The left side of the equation is known as optical density; this is often a first step in calculation in many software packages.
+	- This equation assumes perfect (straight) transmissions through brain tissue; this is not the case, so we propose the modified Beer-Lambert Law, where you calculate the **attenuation** instead, given by $$A = \log_{10} ({I_{inc} \over I_{det}}) = (\epsilon \cdot C \cdot DPF) + G$$ where $DPF$ refers to the light scattering and not being absorbed by the medium and $G$ is due to chromophores.
+	  id:: 67635a53-0cba-4c57-a97d-aa6cc0e44876
+	- We also calculate $\Delta \mu = (\epsilon_{HbO} \cdot \Delta C_{HbO}) + (\epsilon_{Hb} \cdot \Delta C_{Hb})$, which is given from two different light walks of two different wavelengths
+	- We can put these two together two calculate both HbO and Hb. The cons of this equation means that we can't calculate absolute Hb and HbO values and relies on a lot of untrue assumptions.
+- ## Processing fNIRS data
+- Your raw fNIRS data will typically be two waves measured across time for each of your optode pairs.
+- Raw data fNIRS signal content
+	- There are physiological signals, including a cardiac signal (oxygenation and vessel dilation varying with heartbeats), respiration (at about a 0.2 Hz speed in adults), and Mayer waves, which are low-frequency fluctuations in blood pressure (around 0.1 Hz) that neurologists don't know too much about.
+	- There are also non-physiological contributions, which are due to an imperfect measurement platform, which include machine drift (due to temperature changes in your optical system, and can look like a drift over time — recommended to let the machine run for a while before starting tests), motion artifacts (due to the optodes moving on the skin, shown by very long or very short spikes in the data), and measurement noise (miscellaneous environment noise, typically looks like a high frequency at low voltage aka white noise).
+	- During preprocessing, you can use frequency filtering, PCA, adaptive filtering, Kalman filtering, etc.
+- What is a frequency series?
+	- Also known as power spectral density, it is basically a histogram of the number of each size of sine wave that are added together to create your signal.
+	- Good data has lots of low frequencies and few high frequencies. Pure white noise has random amounts of frequency across the graph.
+	- You can sometimes see heartbeat/respiration in this graph, a small spike of waves around the 1 to 1.5 Hz area — also known as pink noise. You can see it being referred to sometimes as the 1/f shape in fMRI preprocessing.
+	- When you are doing frequency filtering, you can use a high-pass filter, low-pass filter, or bandpass filter, specifying which of these frequencies you want to keep and what you want to throw out. There is a bit more complex math behind this.
+- You can use a [PCA](((647ad083-8084-4ae0-8927-5623ea28d330))) filter — removing frequencies if we know how much variation they are responsible for — to remove some physiological noise, but bandpass filtering is still probably a better option because it is hard to interpret.
+- To remove non-physiological contamination, you can use a frequency filtering for machine drift, PCA/spline/CBSI/wavelet/etc. for motion artifacts, and manual removal of motion-y stimuli blocks.
+	- Since motion artifacts are so huge, you can comfortably use PCA for these (even better if you select a window and apply PCA to it)
+	- CBSI (correlation-based signal improvement) is based on the idea that the signals for Hb and HbO are highly anti-correlated, but they have a correlated motion artifact spike/discontinuity, but this assumes what that correlation should be even though the true correlation is a bit "squishy"
+- ## Resources
+- [A Newcomer's Guide to Functional Near Infrared Spectroscopy Experiments](https://pubmed.ncbi.nlm.nih.gov/31634142/)
+- [UCLA fNIRS Bootcamp](https://www.youtube.com/playlist?list=PLJqHk_LwA-fctJUP4zFzmL0cHCrzxz0MQ)

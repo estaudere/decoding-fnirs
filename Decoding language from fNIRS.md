@@ -1,0 +1,35 @@
+- This is investigated for a [Final Codedown](https://finalcodedown.com/) [challenge](https://docs.google.com/document/d/1WwlbqpBR56W7NjFG0_WLACZMo8bXGXZHPJI22JziYM0/edit?tab=t.0), where the task is to achieve high success at decoding brain states from [[fNIRS]] data.
+- ### Initial thoughts
+- One idea could be to delineate "brain states," as outlined in [this video at the linked timestamp](https://youtu.be/cbWLiEN74QE?list=PLJqHk_LwA-fctJUP4zFzmL0cHCrzxz0MQ&t=1150). The video also mentions that a hidden Markov model could be used to analyze the relationships between brain states, and the movement between them. However, this may not be the right fit, as this implies that one brain state only depends on the previous brain state, which may not be the right analogy in our case.
+- We can also use PCA as our [phenomena of interest](https://youtu.be/cbWLiEN74QE?list=PLJqHk_LwA-fctJUP4zFzmL0cHCrzxz0MQ&t=1597), which takes this in a more traditional machine learning direction — you can use k-means clustering or mutual information to cluster and determine categories.
+- The first steps would be to determine what the data looks like itself, then what the data may look like across different categories. Then see if any heuristics can be applied; are there visible differences? Can we note any statistical delineations between sets that demonstrate correlation between brain signals and categories, or is it more hidden? We may need to apply preprocessing first.
+- ### Things to try
+- Pure sklearn on the preprocessed data — SVM, logistic regression, other simple classifiers
+- Step through MNE to do MVPA decoding
+- Create a simple dense network in Pytorch from the raw data, or CNN for time-based analysis
+- Other feature extraction in MNE (Fourier transform?)
+- Drop all Hb to reduce channel count, just use HbO
+- Try the semantic word embeddings using [this](https://cdn.aaai.org/ojs/17493/17493-13-20987-1-2-20210518.pdf) paper
+- [Representational Similarity Analysis](https://mne.tools/stable/auto_examples/decoding/decoding_rsa_sgskip.html)
+- ### Notes
+- After manual inspection (using `epochs.pick("hbo")['0'].plot()`), channel `hbo27` seems to be causing quite a few problems
+- try to focus on determining between the classes, predicting rest vs. not rest is comparatively much easier
+- Any sort of linear classifier (e.g. SVM and a simple, shallow neural net) will not be able to adequately capture the complex relationship between features and labels, as we can see that it basically defaults to predicting a few labels over all the rest (which I assume it selects just based on overrepresentation of that label in the split)
+- one idea (maybe absolutely crazy) is we train a separate model per channel, and then do some kind of ensemble among the 84 models to determine the correct output (label most predicted?). we can even learn another linear model over all of them to weight each model's output differently
+	- this is the same as basically just vectorizing each channel (training a separate embedding model for each) and then learning another distribution on top of this embedding model
+	- we can also then map these to word embeddings if we wanted to go a step further (learning a continuous distribution) instead of a raw classification
+- another idea is to train the same model, but put in all the data per channel, so we are basically multiplying our data. then at inference time we can run the model with each channel's output, then somehow evaluate on top of the results (label most predicted?)
+- another option is to do the kind of pretraining and model weight transfer to finetune described in [this small repo](https://github.com/esbenkc/fnirs-bci)
+- can include the rest period after each sample in order to better capture a delayed hemodynamic response?
+- looks like fNIRSNet works better than anything else i've tried
+	- i wonder if using it on the raw data would make a difference as it may be able to extract signals better
+- clustering, some analysis through manual feature selection + clustering
+- what if you just naively applied PCA to all the data (where the features are `num_channels * num_timesteps`) and then tried a lot of different models on it (like random forest)
+- wow, sliding windows actually works! i wonder if using the raw data may work well also
+	- try increasing the learning rate, it seems to be learning quite slow right now
+	- try adding more dropout, decreasing convs, or adjusting the label smoothing to help it learn faster
+	- got a nice hockey stick chart though
+- one problem is that the way it is currently set up, the training data appears in the test set — i need to change it so that they are completely separate epochs
+- secondly, need to create a rest vs. non-rest classifier to reach 80%
+- for 2 class classifier:
+	- `rest_classifier/logs/Dec24_15-33-37` seems to reach the best, with BCE and not label smoothing
