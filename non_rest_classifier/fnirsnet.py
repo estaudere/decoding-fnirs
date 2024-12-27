@@ -5,48 +5,70 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class DWSConv(torch.nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size):
-        super(DWSConv, self).__init__()
-        self.depth_conv = torch.nn.Conv2d(in_channels, in_channels, kernel_size=kernel_size, stride=1, padding=0, groups=in_channels)
-        self.point_conv = torch.nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0, groups=1)
-
-    def forward(self, input):
-        x = self.depth_conv(input)
-        x = self.point_conv(x)
-        return x
-
-
-class fNIRSNet(torch.nn.Module):
-    """
-    fNIRSNet model
-
-    Args:
-        num_class: Number of classes.
-        DHRConv_width: Width of DHRConv = width of fNIRS signals.
-        DWConv_height: Height of DWConv = height of 2 * fNIRS channels, and '2' means HbO and HbR.
-        num_DHRConv: Number of channels for DHRConv.
-        num_DWConv: number of channels for DWConv.
-    """
-    def __init__(self, num_class, DHRConv_width=186, DWConv_height=42, num_DHRConv=4, num_DWConv=8):
-        super(fNIRSNet, self).__init__()
-        # DHR Module
-        self.conv1 = torch.nn.Conv2d(in_channels=1, out_channels=num_DHRConv, kernel_size=(1, DHRConv_width), stride=1, padding=0)
-        self.bn1 = torch.nn.BatchNorm2d(num_DHRConv)
-
-        # Global Module
-        self.conv2 = DWSConv(in_channels=num_DHRConv, out_channels=num_DWConv, kernel_size=(DWConv_height, 1))
-        self.bn2 = torch.nn.BatchNorm2d(num_DWConv)
-
-        self.fc = torch.nn.Linear(num_DWConv, num_class)
-        self.act = torch.nn.Sigmoid()
-
+class FNIRSCNN(nn.Module):
+    def __init__(self, num_channels, num_timepoints, num_classes, dropout_rate=0.5, num_filters=32):
+        """
+        Parameters:
+        - num_channels: Number of input channels (e.g., 68 for 34 HbO + 34 HbR)
+        - num_timepoints: Number of time points (e.g., 257)
+        - num_classes: Number of output classes (e.g., 3)
+        - dropout_rate: Dropout rate (e.g., 0.5)
+        - num_filters: Number of filters in each convolutional layer (e.g., 32)
+        - kernel_size: Kernel size for convolutional layers (e.g., 3)
+        """
+        super(FNIRSCNN, self).__init__()
+        
+        kernel_size = 3
+        
+        # Convolutional Layer 1
+        self.conv1 = nn.Conv2d(1, num_filters, kernel_size=(num_channels, kernel_size), padding=(0, 1))
+        self.pool1 = nn.MaxPool2d(kernel_size=(1, 2))  # Pool along the time dimension only
+        self.dropout1 = nn.Dropout(dropout_rate)
+        
+        # Convolutional Layer 2
+        self.conv2 = nn.Conv2d(num_filters, num_filters, kernel_size=(1, kernel_size), padding=(0, 1))
+        self.pool2 = nn.MaxPool2d(kernel_size=(1, 2))
+        self.dropout2 = nn.Dropout(dropout_rate)
+        
+        # Convolutional Layer 3
+        self.conv3 = nn.Conv2d(num_filters, num_filters, kernel_size=(1, kernel_size), padding=(0, 1))
+        self.pool3 = nn.MaxPool2d(kernel_size=(1, 2))
+        self.dropout3 = nn.Dropout(dropout_rate)
+        
+        # Fully Connected Layers
+        flattened_size = (num_timepoints // 8) * num_filters  # Adjusted for 3 pooling layers
+        self.fc1 = nn.Linear(flattened_size, 1028)
+        self.fc2 = nn.Linear(1028, 512)
+        self.fc3 = nn.Linear(512, 128)
+        self.fc4 = nn.Linear(128, num_classes)
+    
     def forward(self, x):
-        x = x.view(x.size()[0], 1, x.size()[1], x.size()[2]) # turn to (batch_size, 1, channels, timesteps)
-        x = self.act(self.bn1(self.conv1(x)))
-        x = self.act(self.bn2(self.conv2(x)))
-        x = x.view(x.size()[0], -1)
-        x = self.fc(x)
+        # Input shape: (batch_size, num_channels, num_timepoints)
+        # Reshape to: (batch_size, 1, num_channels, num_timepoints)
+        x = x.unsqueeze(1)
+        
+        # Convolutional Layer 1
+        x = F.relu(self.conv1(x))
+        x = self.pool1(x)
+        x = self.dropout1(x)
+        
+        # Convolutional Layer 2
+        x = F.relu(self.conv2(x))
+        x = self.pool2(x)
+        x = self.dropout2(x)
+        
+        # Convolutional Layer 3
+        x = F.relu(self.conv3(x))
+        x = self.pool3(x)
+        x = self.dropout3(x)
+        
+        # Flatten for Fully Connected Layers
+        x = x.view(x.size(0), -1)  # Flatten to (batch_size, flattened_size)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = F.relu(self.fc3(x))
+        x = self.fc4(x)
+        
         return x
     
     

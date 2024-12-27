@@ -6,7 +6,7 @@ import mne
 from loguru import logger
 
 # Define the subject name
-SUBJECT_NAME = 'New10Subject1'
+SUBJECT_NAME = '../data/New10Subject1'
 
 # collect all data
 all_experiments = os.listdir(SUBJECT_NAME)
@@ -39,7 +39,6 @@ for experiment in all_experiments:
     
     data = epochs.get_data()
     labels = epochs.events
-    
     np.save(os.path.join(data_folder, f'{experiment}UnProcessedData.npy'), data)
     np.save(os.path.join(data_folder, f'{experiment}UnProcessedLabels.npy'), labels)
     logger.info(f"Saved data and labels for {experiment}")

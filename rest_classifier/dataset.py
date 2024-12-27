@@ -1,11 +1,10 @@
-"""Create FNIRS dataset from preprocessing results"""
-import numpy as np
-import os
-from torch.utils.data import Dataset
 from loguru import logger
+import os
+import numpy as np
 import torch
+from torch.utils.data import Dataset
 
-def load_datasets(subject_name, split=0.8, processed_data=True, concat_rest=False, noise=0.01, **kwargs):
+def load_datasets(subject_name, split=0.8, processed_data=True, **kwargs):
     all_experiments = os.listdir(subject_name)
     logger.info(
         f"{len(all_experiments)} experiments found in {subject_name}")
@@ -22,30 +21,8 @@ def load_datasets(subject_name, split=0.8, processed_data=True, concat_rest=Fals
                 subject_name, experiment, f'{experiment}UnProcessedData.npy'))
             exp_labels = np.load(os.path.join(
                 subject_name, experiment, f'{experiment}UnProcessedLabels.npy'), allow_pickle=True)
-
-        # concatenate every two samples to take into account rest period after each task
-        if concat_rest:
-            if len(exp_data) % 2 != 0:
-                logger.debug(
-                    f"Experiment {experiment} has an odd number of samples ({len(exp_data)}). Dropping the last sample.")
-                exp_data = exp_data[:-1]
-                exp_labels = exp_labels[:-1]
-            exp_data = exp_data.reshape(-1, 2, 84,
-                                        93).swapaxes(1, 2).reshape(-1, 84, 93 * 2)
-            exp_labels = exp_labels[0::2]#[:-1]
-        else: # just drop the rest labels
-            if processed_data:
-                exp_labels = exp_labels[:len(exp_data)]
-                exp_data = exp_data[exp_labels[:, 2] != '0.0']
-                exp_labels = exp_labels[exp_labels[:, 2] != '0.0']
-            else:
-                exp_labels = exp_labels[:len(exp_data)]
-                exp_data = exp_data[exp_labels[:, 2] != 1]
-                exp_labels = exp_labels[exp_labels[:, 2] != 1]
             
-        if not np.all(exp_labels[:, 2] != '0.0'):
-            logger.error(
-                f"There are still rest labels in the data, check {experiment}")
+        exp_labels = exp_labels[:len(exp_data)] # fix for experiments with different number of labels and data
 
         assert exp_data.shape[0] == exp_labels.shape[
             0], f"Data and labels have different lengths: {exp_data.shape[0]} and {exp_labels.shape[0]}"
@@ -57,8 +34,7 @@ def load_datasets(subject_name, split=0.8, processed_data=True, concat_rest=Fals
             'int') for label in labels]
     data = np.concatenate(data, axis=0)
     labels = np.concatenate(labels, axis=0)
-    
-    labels = labels - labels.min() # make labels start from 0
+    labels = np.where(labels == 0, 0, 1) # make labels binary, rest vs. non-rest
     
     data = torch.tensor(data, dtype=torch.float32)
     labels = torch.tensor(labels, dtype=torch.long)
@@ -72,7 +48,7 @@ def load_datasets(subject_name, split=0.8, processed_data=True, concat_rest=Fals
     train_data, train_labels = data[:split_idx], labels[:split_idx]
     test_data, test_labels = data[split_idx:], labels[split_idx:]
     
-    return FNIRSDataset(train_data, train_labels, noise=noise, **kwargs), FNIRSDataset(test_data, test_labels, **kwargs)
+    return FNIRSRestDataset(train_data, train_labels, **kwargs), FNIRSRestDataset(test_data, test_labels, **kwargs)
 
 
 def sliding_window_transform(data, labels, window_size, stride):
@@ -84,10 +60,10 @@ def sliding_window_transform(data, labels, window_size, stride):
     
     return windows, expanded_labels
 
-class FNIRSDataset(Dataset):
-    def __init__(self, data, labels, transform=True, PCA=False, sliding_windows=False, window_size=30, stride=15, noise=0.01):
+
+class FNIRSRestDataset(Dataset):
+    def __init__(self, data, labels, transform=True, PCA=False, sliding_windows=False, window_size=30, stride=15):
         self.transform = transform
-        self.noise = noise
         
         # apply window slicing to the data
         if sliding_windows:
@@ -125,7 +101,7 @@ class FNIRSDataset(Dataset):
             mean, std = sample['data'].mean(), sample['data'].std()
             sample['data'] = (sample['data'] - mean) / std
             
-        if self.noise:
-            sample['data'] += torch.randn_like(sample['data']) * self.noise
+        # one-hot encode the labels
+        # sample['label'] = torch.nn.functional.one_hot(sample['label'], num_classes=self.num_classes).float()
 
         return sample

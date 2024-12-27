@@ -10,8 +10,8 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from loguru import logger
 
-from dataset import load_datasets, FNIRSDataset
-from fnirsnet import FNIRSCNN, LabelSmoothing
+from dataset import load_datasets
+from cnn import CNN, LabelSmoothing
 from sklearn.metrics import confusion_matrix
 import seaborn as sns
 from datetime import datetime
@@ -21,24 +21,24 @@ logger.info(f"pid: {os.getpid()}")
 # Parameters
 BATCH_SIZE = 32
 LEARNING_RATE = 1e-4
-NUM_EPOCHS = 200
-LR_STEP_MAX = 200
+NUM_EPOCHS = 1000
+LR_STEP_MAX = 100
 SUBJECT_NAME = '../data/New10Subject1'
 DEVICE = torch.device('mps' if torch.mps.is_available() else 'cpu')
 EVALUATION_INTERVAL = 10
-SPLIT = 0.8
+SPLIT = 0.85
 logger.info(f"Using device: {DEVICE}")
 
 # Load train and test datasets
-train_dataset, test_dataset = load_datasets(SUBJECT_NAME, split=SPLIT, sliding_windows=True, window_size=60, stride=30, noise=0.01, transform=True, processed_data=True) 
+train_dataset, test_dataset = load_datasets(SUBJECT_NAME, split=SPLIT, sliding_windows=True, window_size=40, stride=20) 
 train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, drop_last=True)
 test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, drop_last=True)
 logger.info(f"train dataset size: {len(train_dataset)}, test dataset size: {len(test_dataset)}")
 
 # Initialize model
-model = FNIRSCNN(train_dataset.num_channels, train_dataset.num_timesteps, train_dataset.num_classes, num_filters=32, dropout_rate=0.5)
+model = CNN(train_dataset.num_classes,train_dataset.num_timesteps, train_dataset.num_channels, num_DHRConv=4, num_DWConv=16)
 model.to(DEVICE)
-criterion = LabelSmoothing(0.3)
+criterion = LabelSmoothing(0.2)
 optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE)
 lrStep = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=LR_STEP_MAX)
 
